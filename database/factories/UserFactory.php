@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Enums\UserType;
-use App\Models\Organization;
+use App\Enums\UserRole;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -27,8 +27,7 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'organization_id' => Organization::factory(),
-            'type' => UserType::User,
+            'company_id' => Company::factory(),
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
@@ -41,13 +40,19 @@ class UserFactory extends Factory
     }
 
     /**
-     * Indicate that the user is an organization admin.
+     * Give every created user the plain user role; states may replace it.
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(fn (User $user) => $user->assignRole(UserRole::User));
+    }
+
+    /**
+     * Indicate that the user is a company admin.
      */
     public function admin(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'type' => UserType::Admin,
-        ]);
+        return $this->afterCreating(fn (User $user) => $user->syncRoles(UserRole::Admin));
     }
 
     /**

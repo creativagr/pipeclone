@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Organization;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -12,18 +12,18 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database with one organization holding the local login-link users.
+     * Seed the application's database with one company holding the local login-link users.
      */
     public function run(): void
     {
-        $organization = Organization::factory()->create(['name' => 'Test Organization']);
+        $company = Company::factory()->create(['name' => 'Test Company']);
 
-        User::factory()->for($organization)->admin()->create([
+        User::factory()->for($company)->admin()->create([
             'name' => 'Test Admin',
             'email' => 'admin@example.com',
         ]);
 
-        User::factory()->for($organization)->create([
+        User::factory()->for($company)->create([
             'name' => 'Test User',
             'email' => 'user@example.com',
         ]);

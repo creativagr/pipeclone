@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Enums\UserType;
+use App\Enums\UserRole;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -17,11 +17,11 @@ use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 /**
  * @property int $id
- * @property int $organization_id
- * @property UserType $type
+ * @property int $company_id
  * @property string $name
  * @property string $email
  * @property CarbonImmutable|null $email_verified_at
@@ -34,12 +34,12 @@ use Laravel\Sanctum\HasApiTokens;
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */
-#[Fillable(['name', 'email', 'password', 'type'])]
+#[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     protected static function booted(): void
     {
@@ -56,22 +56,21 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'type' => UserType::class,
             'deactivated_at' => 'datetime',
         ];
     }
 
     /**
-     * @return BelongsTo<Organization, $this>
+     * @return BelongsTo<Company, $this>
      */
-    public function organization(): BelongsTo
+    public function company(): BelongsTo
     {
-        return $this->belongsTo(Organization::class);
+        return $this->belongsTo(Company::class);
     }
 
     public function isAdmin(): bool
     {
-        return $this->type === UserType::Admin;
+        return $this->hasRole(UserRole::Admin);
     }
 
     public function isActive(): bool
@@ -80,13 +79,13 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     }
 
     /**
-     * Whether this user is the only active admin of their organization.
+     * Whether this user is the only active admin of their company.
      */
     public function isLastAdmin(): bool
     {
-        return $this->isAdmin() && ! $this->organization->users()
+        return $this->isAdmin() && ! $this->company->users()
             ->whereKeyNot($this->id)
-            ->where('type', UserType::Admin)
+            ->role(UserRole::Admin)
             ->whereNull('deactivated_at')
             ->exists();
     }

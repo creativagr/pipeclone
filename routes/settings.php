@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\UserPermission;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function () {
@@ -19,8 +20,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::livewire('settings/api-tokens', 'pages::settings.api-tokens')->name('api-tokens.edit');
 
-    Route::middleware('can:manage-organization')->group(function () {
-        Route::livewire('settings/organization', 'pages::settings.organization')->name('organization.edit');
+    Route::middleware('can:'.UserPermission::ManageCompany->value)->group(function () {
+        Route::livewire('settings/company', 'pages::settings.company')->name('company.edit');
         Route::livewire('settings/members', 'pages::settings.members')->name('members.edit');
     });
 });

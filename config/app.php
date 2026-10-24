@@ -20,7 +20,7 @@ return [
     | Simple Users
     |--------------------------------------------------------------------------
     |
-    | Whether organization admins may create, invite, or demote to simple
+    | Whether company admins may create, invite, or demote to simple
     | (non-admin) users. When disabled, pending invitations can no longer
     | be accepted.
     |

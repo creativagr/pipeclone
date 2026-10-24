@@ -60,7 +60,7 @@
 
         @env(config('login-link.allowed_environments'))
             <div class="flex justify-center gap-4 text-sm text-zinc-600 dark:text-zinc-400" data-test="login-links">
-                <x-login-link email="admin@example.com" :user-attributes="['type' => 'admin']" :label="__('Log in as admin')" class="underline" />
+                <x-login-link email="admin@example.com" :label="__('Log in as admin')" class="underline" />
                 <x-login-link email="user@example.com" :label="__('Log in as user')" class="underline" />
             </div>
         @endenv

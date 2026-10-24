@@ -2,11 +2,11 @@
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
-use App\Enums\UserType;
+use App\Enums\UserRole;
 use App\Models\Invitation;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
-use App\Support\AdminOrganization;
+use App\Support\AdminCompany;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -25,7 +25,7 @@ new #[Title('Members')] class extends Component {
     public string $inviteEmail = '';
 
     /**
-     * Create a user in the admin's organization with the given password and send them a verification email.
+     * Create a user in the admin's company with the given password and send them a verification email.
      */
     public function createUser(): void
     {
@@ -36,8 +36,9 @@ new #[Title('Members')] class extends Component {
             'password' => $this->passwordRules(),
         ]);
 
-        AdminOrganization::resolve()->users()
-            ->create([...$validated, 'type' => UserType::User])
+        AdminCompany::resolve()->users()
+            ->create($validated)
+            ->assignRole(UserRole::User)
             ->sendEmailVerificationNotification();
 
         $this->reset('name', 'email', 'password', 'password_confirmation');
@@ -54,7 +55,7 @@ new #[Title('Members')] class extends Component {
 
         $this->validate(['inviteEmail' => $this->emailRules()], attributes: ['inviteEmail' => __('email')]);
 
-        $invitation = AdminOrganization::resolve()->invitations()->createOrFirst(['email' => $this->inviteEmail]);
+        $invitation = AdminCompany::resolve()->invitations()->createOrFirst(['email' => $this->inviteEmail]);
         $invitation->touch();
         $invitation->notify(new InvitationNotification);
 
@@ -65,7 +66,7 @@ new #[Title('Members')] class extends Component {
 
     public function revokeInvitation(int $invitationId): void
     {
-        AdminOrganization::resolve()->invitations()->findOrFail($invitationId)->delete();
+        AdminCompany::resolve()->invitations()->findOrFail($invitationId)->delete();
 
         Flux::toast(text: __('Invitation revoked.'));
     }
@@ -73,13 +74,13 @@ new #[Title('Members')] class extends Component {
     /**
      * Toggle a member between admin and user.
      */
-    public function toggleType(int $userId): void
+    public function toggleRole(int $userId): void
     {
         $member = $this->otherMember($userId);
 
         abort_if($member->isAdmin() && ! config('app.simple_users_enabled'), 403);
 
-        $member->update(['type' => $member->isAdmin() ? UserType::User : UserType::Admin]);
+        $member->syncRoles($member->isAdmin() ? UserRole::User : UserRole::Admin);
     }
 
     /**
@@ -105,7 +106,7 @@ new #[Title('Members')] class extends Component {
     #[Computed]
     public function members(): Collection
     {
-        return AdminOrganization::resolve()->users()->orderBy('name')->get();
+        return AdminCompany::resolve()->users()->with('roles')->orderBy('name')->get();
     }
 
     /**
@@ -114,15 +115,15 @@ new #[Title('Members')] class extends Component {
     #[Computed]
     public function invitations(): Collection
     {
-        return AdminOrganization::resolve()->invitations()->latest('updated_at')->get();
+        return AdminCompany::resolve()->invitations()->latest('updated_at')->get();
     }
 
     /**
-     * Find a member of the admin's organization, excluding the admin themselves.
+     * Find a member of the admin's company, excluding the admin themselves.
      */
     private function otherMember(int $userId): User
     {
-        return AdminOrganization::resolve()->users()->whereKeyNot(Auth::id())->findOrFail($userId);
+        return AdminCompany::resolve()->users()->whereKeyNot(Auth::id())->findOrFail($userId);
     }
 }; ?>
 
@@ -131,7 +132,7 @@ new #[Title('Members')] class extends Component {
 
     <flux:heading level="2" class="sr-only">{{ __('Members') }}</flux:heading>
 
-    <x-pages::settings.layout :heading="__('Members')" :subheading="__('Manage the users of your organization')" wide>
+    <x-pages::settings.layout :heading="__('Members')" :subheading="__('Manage the users of your company')" wide>
         @if (config('app.simple_users_enabled'))
             <div class="mb-4 flex justify-end gap-2">
                 <flux:modal.trigger name="invite-user">
@@ -148,7 +149,7 @@ new #[Title('Members')] class extends Component {
             <flux:table.columns>
                 <flux:table.column>{{ __('Name') }}</flux:table.column>
                 <flux:table.column>{{ __('Email') }}</flux:table.column>
-                <flux:table.column>{{ __('Type') }}</flux:table.column>
+                <flux:table.column>{{ __('Role') }}</flux:table.column>
                 <flux:table.column>{{ __('Status') }}</flux:table.column>
                 <flux:table.column />
             </flux:table.columns>
@@ -175,7 +176,7 @@ new #[Title('Members')] class extends Component {
 
                                     <flux:menu>
                                         @if (! $member->isAdmin() || config('app.simple_users_enabled'))
-                                            <flux:menu.item icon="arrows-up-down" wire:click="toggleType({{ $member->id }})">
+                                            <flux:menu.item icon="arrows-up-down" wire:click="toggleRole({{ $member->id }})">
                                                 {{ $member->isAdmin() ? __('Make user') : __('Make admin') }}
                                             </flux:menu.item>
                                         @endif
@@ -188,7 +189,7 @@ new #[Title('Members')] class extends Component {
                                             icon="trash"
                                             variant="danger"
                                             wire:click="removeMember({{ $member->id }})"
-                                            wire:confirm="{{ __('Remove :name from the organization?', ['name' => $member->name]) }}"
+                                            wire:confirm="{{ __('Remove :name from the company?', ['name' => $member->name]) }}"
                                         >
                                             {{ __('Remove') }}
                                         </flux:menu.item>
@@ -251,7 +252,7 @@ new #[Title('Members')] class extends Component {
             <form wire:submit="invite" class="space-y-6">
                 <div>
                     <flux:heading size="lg">{{ __('Invite user') }}</flux:heading>
-                    <flux:text class="mt-2">{{ __('We will email them a link to join your organization.') }}</flux:text>
+                    <flux:text class="mt-2">{{ __('We will email them a link to join your company.') }}</flux:text>
                 </div>
 
                 <flux:input wire:model="inviteEmail" :label="__('Email')" type="email" required />

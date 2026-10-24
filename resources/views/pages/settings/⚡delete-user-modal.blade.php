@@ -11,7 +11,7 @@ new class extends Component {
     public string $password = '';
 
     /**
-     * Delete the currently authenticated user, and their organization when they are its only member.
+     * Delete the currently authenticated user, and their company when they are its only member.
      */
     public function deleteUser(Logout $logout): void
     {
@@ -20,11 +20,11 @@ new class extends Component {
         ]);
 
         $user = Auth::user();
-        $organization = $user->organization;
-        $isOnlyMember = ! $organization->users()->whereKeyNot($user->id)->exists();
+        $company = $user->company;
+        $isOnlyMember = ! $company->users()->whereKeyNot($user->id)->exists();
 
         if (! $isOnlyMember && $user->isLastAdmin()) {
-            $this->addError('password', __('You are the only admin of your organization. Make another member an admin before deleting your account.'));
+            $this->addError('password', __('You are the only admin of your company. Make another member an admin before deleting your account.'));
 
             return;
         }
@@ -32,7 +32,7 @@ new class extends Component {
         tap($user, $logout(...))->delete();
 
         if ($isOnlyMember) {
-            $organization->delete();
+            $company->delete();
         }
 
         $this->redirect('/', navigate: true);

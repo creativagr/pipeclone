@@ -3,12 +3,11 @@
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
-use Database\Factories\OrganizationFactory;
+use Database\Factories\CompanyFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * @property int $id
@@ -17,22 +16,19 @@ use Laravel\Sanctum\PersonalAccessToken;
  * @property CarbonImmutable|null $updated_at
  */
 #[Fillable(['name'])]
-class Organization extends Model
+class Company extends Model
 {
-    /** @use HasFactory<OrganizationFactory> */
+    /** @use HasFactory<CompanyFactory> */
     use HasFactory;
 
     /**
-     * Users are removed by the database cascade, which skips model events, so their
-     * polymorphic API tokens must be deleted here.
+     * Delete users through Eloquent rather than the database cascade, so their model events
+     * clean up polymorphic rows (API tokens, role assignments) that have no foreign key.
      */
     protected static function booted(): void
     {
-        static::deleting(function (Organization $organization): void {
-            PersonalAccessToken::query()
-                ->where('tokenable_type', (new User)->getMorphClass())
-                ->whereIn('tokenable_id', $organization->users()->select('id'))
-                ->delete();
+        static::deleting(function (Company $company): void {
+            $company->users->each(fn (User $user) => $user->delete());
         });
     }
 

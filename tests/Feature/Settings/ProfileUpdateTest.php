@@ -61,10 +61,10 @@ test('user can delete their account', function () {
     expect(auth()->check())->toBeFalse();
 });
 
-test('the last admin of an organization cannot delete their account', function () {
+test('the last admin of a company cannot delete their account', function () {
     $admin = User::factory()->admin()->create();
-    User::factory()->for($admin->organization)->create();
-    User::factory()->for($admin->organization)->admin()->deactivated()->create();
+    User::factory()->for($admin->company)->create();
+    User::factory()->for($admin->company)->admin()->deactivated()->create();
 
     Livewire::actingAs($admin)
         ->test('pages::settings.delete-user-modal')
@@ -75,9 +75,9 @@ test('the last admin of an organization cannot delete their account', function (
     expect($admin->fresh())->not->toBeNull();
 });
 
-test('the only member of an organization can delete their account along with the organization', function () {
+test('the only member of a company can delete their account along with the company', function () {
     $admin = User::factory()->admin()->create();
-    $invitation = Invitation::factory()->for($admin->organization)->create();
+    $invitation = Invitation::factory()->for($admin->company)->create();
 
     Livewire::actingAs($admin)
         ->test('pages::settings.delete-user-modal')
@@ -86,13 +86,13 @@ test('the only member of an organization can delete their account along with the
         ->assertHasNoErrors();
 
     $this->assertModelMissing($admin);
-    $this->assertModelMissing($admin->organization);
+    $this->assertModelMissing($admin->company);
     $this->assertModelMissing($invitation);
 });
 
 test('an admin can delete their account when another active admin remains', function () {
     $admin = User::factory()->admin()->create();
-    User::factory()->for($admin->organization)->admin()->create();
+    User::factory()->for($admin->company)->admin()->create();
 
     Livewire::actingAs($admin)
         ->test('pages::settings.delete-user-modal')

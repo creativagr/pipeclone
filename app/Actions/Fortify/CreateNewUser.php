@@ -4,8 +4,8 @@ namespace App\Actions\Fortify;
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
-use App\Enums\UserType;
-use App\Models\Organization;
+use App\Enums\UserRole;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -16,7 +16,7 @@ class CreateNewUser implements CreatesNewUsers
     use PasswordValidationRules, ProfileValidationRules;
 
     /**
-     * Validate and create a newly registered user as the admin of a new organization.
+     * Validate and create a newly registered user as the admin of a new company.
      *
      * @param  array<string, string>  $input
      */
@@ -27,13 +27,13 @@ class CreateNewUser implements CreatesNewUsers
             'password' => $this->passwordRules(),
         ])->validate();
 
-        return DB::transaction(fn (): User => Organization::create(['name' => $input['name']])
+        return DB::transaction(fn (): User => Company::create(['name' => $input['name']])
             ->users()
             ->create([
                 'name' => $input['name'],
                 'email' => $input['email'],
                 'password' => $input['password'],
-                'type' => UserType::Admin,
-            ]));
+            ])
+            ->assignRole(UserRole::Admin));
     }
 }

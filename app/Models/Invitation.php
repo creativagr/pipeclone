@@ -12,7 +12,7 @@ use Illuminate\Notifications\Notifiable;
 
 /**
  * @property int $id
- * @property int $organization_id
+ * @property int $company_id
  * @property string $email
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -24,10 +24,10 @@ class Invitation extends Model
     use HasFactory, Notifiable;
 
     /**
-     * @return BelongsTo<Organization, $this>
+     * @return BelongsTo<Company, $this>
      */
-    public function organization(): BelongsTo
+    public function company(): BelongsTo
     {
-        return $this->belongsTo(Organization::class);
+        return $this->belongsTo(Company::class);
     }
 }

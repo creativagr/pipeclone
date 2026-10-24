@@ -204,16 +204,16 @@ A single Laravel monolith with Livewire for the UI, MySQL, Redis queues and the 
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Backend | Laravel 12, PHP 8.3+ | Team standard; policies, queues, scheduler, Sanctum built in |
-| UI | Livewire 3 + Alpine, Tailwind CSS (or Bootstrap 5) | Server-driven Kanban and tables without a SPA; SortableJS for drag and drop |
-| Admin screens | Filament 3 for settings, pipelines, labels, users | Saves weeks on CRUD-heavy screens; Livewire based |
+| Backend | Laravel 13, PHP 8.4 | Team standard; policies, queues, scheduler, Sanctum built in |
+| UI | Livewire 4 + Alpine, Tailwind CSS 4, Flux Pro | Server-driven Kanban and tables without a SPA; Flux Pro ships kanban, timeline, rich text editor, file upload and charts |
+| Admin screens | Flux Pro, same as the rest of the app (no Filament) | One UI system to maintain; Flux covers CRUD screens |
 | Database | MySQL 8 with full-text indexes; Laravel Scout + Meilisearch if search gets slow | Fits current volume |
 | Queues / jobs | Redis + Horizon; scheduler for renewal engine, email sync, campaign batches | Visibility on failures |
 | Files | Laravel filesystem on S3 (Google Drive adapter optional) | REQ ACT-3 |
 | Mail sync | Gmail API (Google Workspace) via OAuth; IMAP fallback | Matches Sales Inbox behaviour |
 | Bulk email | Resend or AWS SES driver behind one interface | Swap provider without code changes |
 | Audit | spatie/laravel-activitylog | Feeds timeline and changelog |
-| Permissions | Laravel policies + global scopes for owner/follower visibility; spatie/laravel-permission for roles | PER-1 to PER-3 |
+| Permissions | Laravel policies + global scopes for owner/follower visibility; spatie/laravel-permission for roles (admin, user) and permissions | PER-1 to PER-3 |
 | API | REST under /api/v1 with Sanctum tokens; OpenAPI spec | Make, website forms, future MCP |
 | Hosting | One VPS (Forge or Ploi) or the company's existing server | Low fixed cost |
 
@@ -221,11 +221,11 @@ Domain code lives in small action classes (MoveDealToStage, RolloverRenewal, Ups
 
 ## Build plan
 
-The MVP is about 40 developer-days (8 to 9 weeks for one developer working with Claude Code), followed by a 2-week parallel run before Pipedrive is switched off. Estimates are first-pass and assume Filament for admin screens.
+The MVP is about 40 developer-days (8 to 9 weeks for one developer working with Claude Code), followed by a 2-week parallel run before Pipedrive is switched off. Estimates are first-pass and assume Flux Pro for all screens, admin included.
 
 | # | Milestone | Main work | Requirements | Est. days |
 | --- | --- | --- | --- | --- |
-| 0 | Foundations | Repo, CI, auth with Google SSO, roles, base layout, Filament admin, audit log | PER-1, NFR | 3 |
+| 0 | Foundations | Repo, CI, auth with Google SSO, roles, base layout, admin screens, audit log | PER-1, NFR | 3 |
 | 1 | Contacts and orgs | Models, list views, detail pages, labels, custom fields, notes, documents on S3, timeline component | CON-1 to CON-6, CON-8, ACT-1 to ACT-3 | 8 |
 | 2 | Deals and pipelines | Pipelines/stages admin, Kanban with drag and drop, deal page, products, Won/Lost, saved filters | DEA-1 to DEA-6, SRC-2 | 8 |
 | 3 | Renewals and leads | Renewal scheduler, rollover action, Lead API, Google Chat webhook, re-point Make scenarios | REN-1 to REN-6, LEA-1 to LEA-3, INT-1 | 5 |

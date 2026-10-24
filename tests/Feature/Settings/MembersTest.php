@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\UserType;
+use App\Enums\UserRole;
 use App\Models\Invitation;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
@@ -24,9 +24,9 @@ test('non-admins cannot use the members component', function () {
         ->assertForbidden();
 });
 
-test('admins see only members of their own organization', function () {
+test('admins see only members of their own company', function () {
     $admin = User::factory()->admin()->create();
-    $colleague = User::factory()->for($admin->organization)->create();
+    $colleague = User::factory()->for($admin->company)->create();
     $outsider = User::factory()->create();
 
     $this->actingAs($admin)
@@ -36,7 +36,7 @@ test('admins see only members of their own organization', function () {
         ->assertDontSee($outsider->email);
 });
 
-test('admins can create a user in their organization who is sent a verification email', function () {
+test('admins can create a user in their company who is sent a verification email', function () {
     Notification::fake();
     $admin = User::factory()->admin()->create();
 
@@ -51,8 +51,8 @@ test('admins can create a user in their organization who is sent a verification 
 
     $user = User::where('email', 'jane@example.com')->sole();
 
-    expect($user->organization_id)->toBe($admin->organization_id)
-        ->and($user->type)->toBe(UserType::User)
+    expect($user->company_id)->toBe($admin->company_id)
+        ->and($user->getRoleNames()->all())->toBe([UserRole::User->value])
         ->and($user->hasVerifiedEmail())->toBeFalse();
     Notification::assertSentTo($user, VerifyEmail::class);
 });
@@ -80,7 +80,7 @@ test('admins can invite a user by email', function () {
         ->call('invite')
         ->assertHasNoErrors();
 
-    $invitation = $admin->organization->invitations()->sole();
+    $invitation = $admin->company->invitations()->sole();
 
     expect($invitation->email)->toBe('invitee@example.com');
     Notification::assertSentTo($invitation, InvitationNotification::class);
@@ -89,7 +89,7 @@ test('admins can invite a user by email', function () {
 test('re-inviting an email resends the invitation and refreshes its sent date', function () {
     Notification::fake();
     $admin = User::factory()->admin()->create();
-    $invitation = Invitation::factory()->for($admin->organization)->create(['updated_at' => now()->subWeek()]);
+    $invitation = Invitation::factory()->for($admin->company)->create(['updated_at' => now()->subWeek()]);
 
     Livewire::actingAs($admin)
         ->test('pages::settings.members')
@@ -97,7 +97,7 @@ test('re-inviting an email resends the invitation and refreshes its sent date', 
         ->call('invite')
         ->assertHasNoErrors();
 
-    expect($admin->organization->invitations()->sole()->updated_at->isToday())->toBeTrue();
+    expect($admin->company->invitations()->sole()->updated_at->isToday())->toBeTrue();
     Notification::assertSentTo($invitation, InvitationNotification::class);
 });
 
@@ -117,7 +117,7 @@ test('inviting an already registered email is rejected', function () {
 
 test('admins can revoke an invitation', function () {
     $admin = User::factory()->admin()->create();
-    $invitation = Invitation::factory()->for($admin->organization)->create();
+    $invitation = Invitation::factory()->for($admin->company)->create();
 
     Livewire::actingAs($admin)
         ->test('pages::settings.members')
@@ -126,7 +126,7 @@ test('admins can revoke an invitation', function () {
     $this->assertModelMissing($invitation);
 });
 
-test('admins cannot revoke an invitation of another organization', function () {
+test('admins cannot revoke an invitation of another company', function () {
     $admin = User::factory()->admin()->create();
     $invitation = Invitation::factory()->create();
 
@@ -140,20 +140,20 @@ test('admins cannot revoke an invitation of another organization', function () {
 
 test('admins can promote a user and demote an admin', function () {
     $admin = User::factory()->admin()->create();
-    $member = User::factory()->for($admin->organization)->create();
+    $member = User::factory()->for($admin->company)->create();
 
     $component = Livewire::actingAs($admin)->test('pages::settings.members');
 
-    $component->call('toggleType', $member->id);
-    expect($member->fresh()->type)->toBe(UserType::Admin);
+    $component->call('toggleRole', $member->id);
+    expect($member->fresh()->getRoleNames()->all())->toBe([UserRole::Admin->value]);
 
-    $component->call('toggleType', $member->id);
-    expect($member->fresh()->type)->toBe(UserType::User);
+    $component->call('toggleRole', $member->id);
+    expect($member->fresh()->getRoleNames()->all())->toBe([UserRole::User->value]);
 });
 
 test('admins can deactivate and reactivate a member', function () {
     $admin = User::factory()->admin()->create();
-    $member = User::factory()->for($admin->organization)->create();
+    $member = User::factory()->for($admin->company)->create();
 
     $component = Livewire::actingAs($admin)->test('pages::settings.members');
 
@@ -166,7 +166,7 @@ test('admins can deactivate and reactivate a member', function () {
 
 test('admins can remove a member', function () {
     $admin = User::factory()->admin()->create();
-    $member = User::factory()->for($admin->organization)->create();
+    $member = User::factory()->for($admin->company)->create();
 
     $token = $member->createToken('member')->accessToken;
 
@@ -178,25 +178,23 @@ test('admins can remove a member', function () {
     $this->assertModelMissing($token);
 });
 
-test('admins cannot change or remove themselves or users of other organizations', function (string $action, Closure $target) {
+test('admins cannot change or remove themselves or users of other companies', function (string $action, Closure $target) {
     $admin = User::factory()->admin()->create();
     $user = $target($admin);
+    $rolesBefore = $user->getRoleNames()->all();
 
     Livewire::actingAs($admin)
         ->test('pages::settings.members')
         ->call($action, $user->id)
         ->assertNotFound();
 
-    $this->assertDatabaseHas('users', [
-        'id' => $user->id,
-        'type' => $user->type,
-        'deactivated_at' => null,
-    ]);
+    $this->assertDatabaseHas('users', ['id' => $user->id, 'deactivated_at' => null]);
+    expect($user->fresh()->getRoleNames()->all())->toBe($rolesBefore);
 })->with([
-    'toggle type of self' => ['toggleType', fn (User $admin): User => $admin],
+    'toggle role of self' => ['toggleRole', fn (User $admin): User => $admin],
     'deactivate self' => ['toggleActive', fn (User $admin): User => $admin],
     'remove self' => ['removeMember', fn (User $admin): User => $admin],
-    'toggle type of outsider' => ['toggleType', fn (): User => User::factory()->create()],
+    'toggle role of outsider' => ['toggleRole', fn (): User => User::factory()->create()],
     'deactivate outsider' => ['toggleActive', fn (): User => User::factory()->create()],
     'remove outsider' => ['removeMember', fn (): User => User::factory()->create()],
 ]);
@@ -233,7 +231,7 @@ test('admins cannot create or invite users when simple users are disabled', func
 test('admins cannot demote admins when simple users are disabled', function () {
     config(['app.simple_users_enabled' => false]);
     $admin = User::factory()->admin()->create();
-    $otherAdmin = User::factory()->admin()->for($admin->organization)->create();
+    $otherAdmin = User::factory()->admin()->for($admin->company)->create();
 
     $this->actingAs($admin)
         ->get(route('members.edit'))
@@ -241,7 +239,7 @@ test('admins cannot demote admins when simple users are disabled', function () {
 
     Livewire::actingAs($admin)
         ->test('pages::settings.members')
-        ->call('toggleType', $otherAdmin->id)
+        ->call('toggleRole', $otherAdmin->id)
         ->assertForbidden();
 
     expect($otherAdmin->fresh()->isAdmin())->toBeTrue();

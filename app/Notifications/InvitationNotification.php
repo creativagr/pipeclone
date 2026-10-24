@@ -36,8 +36,8 @@ class InvitationNotification extends Notification
         );
 
         return (new MailMessage)
-            ->subject(__('You are invited to join :organization', ['organization' => $invitation->organization->name]))
-            ->line(__('You have been invited to join :organization.', ['organization' => $invitation->organization->name]))
+            ->subject(__('You are invited to join :company', ['company' => $invitation->company->name]))
+            ->line(__('You have been invited to join :company.', ['company' => $invitation->company->name]))
             ->action(__('Accept invitation'), $url)
             ->line(__('This invitation expires in :days days.', ['days' => self::EXPIRES_IN_DAYS]));
     }

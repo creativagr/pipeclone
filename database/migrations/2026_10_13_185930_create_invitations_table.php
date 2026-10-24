@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('invitations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('company_id')->constrained()->cascadeOnDelete();
             $table->string('email');
             $table->timestamps();
 
-            $table->unique(['organization_id', 'email']);
+            $table->unique(['company_id', 'email']);
         });
     }
 

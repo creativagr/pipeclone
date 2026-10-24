@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\UserType;
+use App\Enums\UserRole;
 use App\Models\User;
 use Laravel\Fortify\Features;
 
@@ -28,7 +28,7 @@ test('new users can register', function () {
     $this->assertAuthenticated();
 });
 
-test('registering creates an organization named after the user with the user as admin', function () {
+test('registering creates a company named after the user with the user as admin', function () {
     $this->post(route('register.store'), [
         'name' => 'John Doe',
         'email' => 'test@example.com',
@@ -38,8 +38,8 @@ test('registering creates an organization named after the user with the user as 
 
     $user = User::where('email', 'test@example.com')->sole();
 
-    expect($user->organization->name)->toBe('John Doe')
-        ->and($user->type)->toBe(UserType::Admin);
+    expect($user->company->name)->toBe('John Doe')
+        ->and($user->getRoleNames()->all())->toBe([UserRole::Admin->value]);
 });
 
 test('registration can be disabled with an environment variable', function () {

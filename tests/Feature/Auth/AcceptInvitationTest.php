@@ -1,6 +1,6 @@
 <?php
 
-use App\Enums\UserType;
+use App\Enums\UserRole;
 use App\Models\Invitation;
 use App\Models\User;
 use Illuminate\Support\Facades\URL;
@@ -16,7 +16,7 @@ test('a signed invitation link renders the accept page', function () {
 
     $this->get(acceptInvitationUrl($invitation))
         ->assertOk()
-        ->assertSee($invitation->organization->name);
+        ->assertSee($invitation->company->name);
 });
 
 test('an unsigned invitation link is rejected', function () {
@@ -41,7 +41,7 @@ test('a revoked invitation link returns 404', function () {
     $this->get($url)->assertNotFound();
 });
 
-test('accepting an invitation creates a verified user in the organization and logs them in', function () {
+test('accepting an invitation creates a verified user in the company and logs them in', function () {
     $invitation = Invitation::factory()->create();
 
     Livewire::test('pages::auth.accept-invitation', ['invitation' => $invitation])
@@ -54,8 +54,8 @@ test('accepting an invitation creates a verified user in the organization and lo
 
     $user = User::where('email', $invitation->email)->sole();
 
-    expect($user->organization_id)->toBe($invitation->organization_id)
-        ->and($user->type)->toBe(UserType::User)
+    expect($user->company_id)->toBe($invitation->company_id)
+        ->and($user->getRoleNames()->all())->toBe([UserRole::User->value])
         ->and($user->hasVerifiedEmail())->toBeTrue();
     $this->assertAuthenticatedAs($user);
     $this->assertModelMissing($invitation);

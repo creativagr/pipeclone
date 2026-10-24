@@ -7,8 +7,8 @@
             <flux:navlist.item :href="route('security.edit')" wire:navigate>{{ __('Security') }}</flux:navlist.item>
             <flux:navlist.item :href="route('appearance.edit')" wire:navigate>{{ __('Appearance') }}</flux:navlist.item>
             <flux:navlist.item :href="route('api-tokens.edit')" wire:navigate>{{ __('API tokens') }}</flux:navlist.item>
-            @can('manage-organization')
-                <flux:navlist.item :href="route('organization.edit')" wire:navigate>{{ __('Organization') }}</flux:navlist.item>
+            @can(App\Enums\UserPermission::ManageCompany->value)
+                <flux:navlist.item :href="route('company.edit')" wire:navigate>{{ __('Company') }}</flux:navlist.item>
                 <flux:navlist.item :href="route('members.edit')" wire:navigate>{{ __('Members') }}</flux:navlist.item>
             @endcan
         </flux:navlist>

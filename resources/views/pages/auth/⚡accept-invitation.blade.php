@@ -2,7 +2,7 @@
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
-use App\Enums\UserType;
+use App\Enums\UserRole;
 use App\Models\Invitation;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +26,7 @@ new #[Layout('layouts::auth'), Title('Accept invitation')] class extends Compone
     }
 
     /**
-     * Create the invited user in the inviting organization and log them in.
+     * Create the invited user in the inviting company and log them in.
      */
     public function accept(): void
     {
@@ -38,12 +38,11 @@ new #[Layout('layouts::auth'), Title('Accept invitation')] class extends Compone
         Validator::make(['email' => $this->invitation->email], ['email' => $this->emailRules()])->validate();
 
         $user = DB::transaction(function () use ($validated) {
-            $user = $this->invitation->organization->users()->create([
+            $user = $this->invitation->company->users()->create([
                 'name' => $validated['name'],
                 'email' => $this->invitation->email,
                 'password' => $validated['password'],
-                'type' => UserType::User,
-            ]);
+            ])->assignRole(UserRole::User);
 
             $user->markEmailAsVerified();
             $this->invitation->delete();
@@ -59,7 +58,7 @@ new #[Layout('layouts::auth'), Title('Accept invitation')] class extends Compone
 
 <div class="flex flex-col gap-6">
     <x-auth-header
-        :title="__('Join :organization', ['organization' => $invitation->organization->name])"
+        :title="__('Join :company', ['company' => $invitation->company->name])"
         :description="__('Choose your name and password to accept the invitation')"
     />
 
