@@ -4,7 +4,7 @@
 
 **Goal:** Replace Pipedrive for daily sales and renewals work with an internal Laravel app, then add campaigns and automations.
 
-**Architecture:** One Laravel monolith. Livewire 4 single-file pages with Flux Pro for every screen, admin included. Domain logic lives in small action classes (for example `MoveDealToStage`, `RolloverRenewal`, `UpsertContactFromLead`) so the UI, the API, the scheduler and later the automations share one code path. MySQL, database queue, Laravel scheduler.
+**Architecture:** One Laravel monolith. Livewire 4 single-file pages with Flux Pro for every screen, admin included. Domain logic lives in small action classes (for example `MoveDealToStage`, `RolloverRenewal`, `UpsertContactFromLead`) so the UI, the API, the scheduler and later the automations share one code path. Multi-company: every CRM row belongs to one company and a global scope keeps companies apart. MySQL, database queue, Laravel scheduler.
 
 **Tech stack:** PHP 8.4, Laravel 13, Livewire 4, Flux Pro 2 (kanban, timeline, editor, file upload, charts, command palette), Tailwind 4, MySQL 8, Pest 5, Fortify, Sanctum, spatie/laravel-permission, spatie/laravel-activitylog, Scout, Socialite, laravel-phone, laravel-backup, laravel/mcp.
 
@@ -14,7 +14,7 @@
 
 | # | Milestone | Main result | Requirements | Est. days |
 | --- | --- | --- | --- | --- |
-| 0 | Foundations | Google sign-in, roles and financials permission, app shell | PER-1, PER-3 (flag only), PER-4, NFR security | 2 (part done) |
+| 0 | Foundations | Google sign-in, company isolation, roles and financials permission, app shell | PER-1, PER-3 (flag only), PER-4, PER-5, NFR security | 3 (part done) |
 | 1 | Organizations and contacts | Real Pipedrive people and organizations in the app, owner/follower visibility | CON-1 to CON-5, CON-8, PER-2 | 8 |
 | 2 | Timeline, notes, documents | Notes, tasks, files and history on every record | CON-6, ACT-1 to ACT-3 | 4 |
 | 3 | Pipelines and deals | Sales and Renewals boards with real deals | DEA-1 to DEA-6, PER-3 | 8 |
@@ -25,7 +25,7 @@
 | P2 | Campaigns | Bulk email through Resend or AWS SES | CAM-1 to CAM-5 | 10 |
 | P3 | Automations | The 8 active Pipedrive automations rebuilt | AUT-1 to AUT-3, INT-2 | 10 to 15 |
 
-MVP total: about 41 days. Order is fixed at three points: deals (3) need contacts and organizations (1); the renewals engine (4) needs deals (3); go-live (7) needs email (6) and data tools (5).
+MVP total: about 42 days. Order is fixed at three points: deals (3) need contacts and organizations (1); the renewals engine (4) needs deals (3); go-live (7) needs email (6) and data tools (5).
 
 Each milestone ends in a running app the three of you can use with real data. How you test it is up to you; this plan only states what each milestone delivers.
 
@@ -37,8 +37,9 @@ Each milestone ends in a running app the three of you can use with real data. Ho
 - Dark mode on every screen (Flux handles it; custom markup uses `dark:` variants).
 - Lists are paginated server-side and indexed; design for 100,000 contacts; Kanban and list pages under 1 s with current data (12,000 contacts, 6,000 organizations, a few hundred deals).
 - Every change to deals, contacts and organizations is audited (who, when, old and new value) through spatie/laravel-activitylog.
+- Company isolation: every CRM table has `company_id` (indexed, foreign key, cascade on company delete) and its model extends `App\Models\CompanyScopedModel` (global scope by current company, fails closed when there is none). Unique indexes include `company_id` (a contact email is unique per company, not globally). Route model binding, validation rules (`exists`, `unique`) and queued jobs never reach another company's rows.
 - Visibility (PER-2) and financials (PER-3) are enforced in one place per model (query scope plus policy) and reused by web, API, exports, search and the MCP server. No screen re-implements them.
-- Every imported Pipedrive row keeps its Pipedrive ID (`pipedrive_id`, unique, nullable) so imports can be re-run and update instead of duplicating.
+- Every imported Pipedrive row keeps its Pipedrive ID (`pipedrive_id`, nullable, unique per company) so imports can be re-run and update instead of duplicating.
 - Tests: Pest feature tests per milestone, run with `php artisan test --parallel --compact`. Pint, PHPStan (level 7) and Rector clean on touched code.
 - Never `git commit` (the owner commits). Never migrate the main database from tests.
 
@@ -46,11 +47,11 @@ Each milestone ends in a running app the three of you can use with real data. Ho
 
 These are my calls where the spec left a choice. Each can be changed before the milestone that depends on it.
 
-1. **Single company.** The app serves one business. CRM tables get no `company_id`; the existing Company (renamed from the starter kit's Organization) is just the account that owns the users. Public sign-up is switched off (`REGISTRATION_ENABLED=false`) because a second sign-up would create a second company whose admin, under PER-1, could see all CRM data.
+1. **Every company's data is isolated (owner's decision).** Each Company (renamed from the starter kit's Organization) is a separate tenant. Every CRM table has a `company_id`, and every CRM model extends `App\Models\CompanyScopedModel`, which adds a global scope and sets `company_id` on create from the current company (the signed-in user's, or one chosen with `CurrentCompany::run()`). A base class rather than a trait, because PHPStan reports a trait with no user yet as unused. An admin sees everything in their own company and nothing in another. Code with no signed-in user (scheduler, queue jobs, import command, API) sets the company explicitly. Public sign-up can stay on: each sign-up gets its own empty company. Roles stay global in spatie (no teams feature) because every user belongs to exactly one company.
 2. **Names follow Pipedrive.** CRM entities are `Organization`, `Contact`, `Deal`, `Pipeline`, `Stage`, `Label`, `Activity`, `Document`. The tenant is `Company`, so there is no clash.
-3. **Access model: one owner plus followers** (the spec's proposal, PER-2). A user sees a record when they own it or follow it; following a deal does not grant access to its contact or organization unless they follow those too. Admins see everything. This is still listed as an open question (co-owners) and must be settled before milestone 1.
-4. **Permissions** are spatie permissions on the existing roles: `manage company` (exists), `view all records` (admin), `see financials` (admin by default, can be granted per user from the Members page), `manage pipelines` (admin). Each new permission ships with its own migration.
-5. **Pipedrive import comes first, not last.** One re-runnable command, `php artisan pipedrive:import {--only=*}`, reading the Pipedrive API with a token from `config/services.php`. Each milestone extends it with the data that milestone needs. Until go-live a re-run overwrites local edits on imported rows; that is acceptable while testing and stops at go-live.
+3. **Access model: one owner plus followers** (the spec's proposal, PER-2). Inside a company, a user sees a record when they own it or follow it; following a deal does not grant access to its contact or organization unless they follow those too. Admins see everything in their company. This is still listed as an open question (co-owners) and must be settled before milestone 1.
+4. **Permissions** are spatie permissions on the existing roles: `manage company` (exists), `view all records` (admin), `see financials` (admin by default, can be granted per user from the Members page), `manage pipelines` (admin). Each new permission is a `UserPermission` case plus a migration that calls `RolesAndPermissions::sync()`.
+5. **Pipedrive import comes first, not last.** One re-runnable command, `php artisan pipedrive:import {company} {--only=*}`, importing into the given company and reading the Pipedrive API with a token from `config/services.php`. Each milestone extends it with the data that milestone needs. Until go-live a re-run overwrites local edits on imported rows; that is acceptable while testing and stops at go-live.
 6. **Timeline** reads one `activities` table (notes, emails, tasks, system events, campaign sends). Domain actions write system events (stage change, value change, won/lost) as activities. The field-level audit from activitylog is shown separately as a Changelog tab.
 7. **Money** is `decimal(12,2)` plus a 3-letter `currency` (default EUR).
 8. **Search** uses Scout's database engine (MySQL full-text). Meilisearch only if it proves slow.
@@ -78,25 +79,25 @@ These are my calls where the spec left a choice. Each can be changed before the 
 Inputs the spec implies but does not spell out, most likely to bite first. Each one gets a test in the milestone named.
 
 1. **Same person, different spelling.** Emails differing only in case or spaces, phones as `6971234567`, `+30 697 123 4567` and `00306971234567` must match the same contact. Emails are stored lowercased and trimmed, phones as E.164 via laravel-phone (default region GR). Tested in milestone 1 (import) and milestone 4 (lead upsert).
-2. **Visibility leaks through side doors.** A user who cannot see a deal must not see it through search results, Kanban column totals, a contact's timeline, CSV export, the API or the MCP server. One scope per model, plus a cross-cutting test per side door in the milestone that adds that door (3, 4, 5, 6).
+2. **Data leaking across companies or past visibility.** An admin of company A must never see, open by URL, search, export, receive by API or MCP, or be notified about anything from company B; a user who cannot see a deal must not see it through search results, Kanban column totals, a contact's timeline, CSV export, the API or the MCP server. Typical holes: guessing an ID in a URL, an `exists` validation rule without `company_id`, a queued job or scheduled command that runs without a signed-in user. Every milestone that adds a model or a side door adds a test with two companies (0 to 6).
 3. **Greek text in search and sort.** Searching `παπαδοπουλος` finds `Παπαδόπουλος`, and lists sort Greek names alphabetically. Checked against the MySQL collation in milestone 1; tested again for full-text search in milestone 5.
 4. **Date boundaries in the renewal engine.** A deal expiring today, exactly 30 or 90 days out, or with no expiry date; the job running twice the same day; a user moving the card while the job runs. Thresholds use Europe/Athens dates, the job is idempotent, and a manual move is never overridden by a less advanced automatic stage. Tested in milestone 4.
 5. **Re-running the Pipedrive import.** A second run must update, not duplicate; deleted Pipedrive records must not crash it; renewal parent/child links must survive in any order of arrival. Tested in milestones 1 and 3.
 
 ---
 
-## Milestone 0: Foundations (2 days, partly done)
+## Milestone 0: Foundations (3 days, done 27 October 2026)
 
-**Already done:** MySQL database, starter kit Organization renamed to Company, roles moved to spatie/laravel-permission (`admin`, `user`, permission `manage company`), Filament dropped from the spec.
+**Already done:** MySQL database, starter kit Organization renamed to Company, roles moved to spatie/laravel-permission (`admin`, `user`, permission `manage company`), Filament dropped from the spec. Rector fixed for Rector 2.8 (cache moved to `storage/rector/cache`) and project guidelines updated.
 
-**Deliverable:** you sign in with your Google Workspace account (or email, password and 2FA), see the CRM navigation (Contacts, Organizations, Deals, Renewals, Settings, all empty for now), and an admin can grant or remove "see financials" for each member.
+**Deliverable:** you sign in with your Google Workspace account (or email, password and 2FA), see the CRM navigation (Contacts, Organizations, Deals, Renewals, Settings, all empty for now), and an admin can grant or remove "see financials" for each member of their company.
 
 **Work:**
-- Google sign-in with Socialite for existing users only (no sign-up through Google); email plus 2FA stays available.
-- Switch off public registration; document it in the README.
-- Permissions `view all records`, `see financials`, `manage pipelines` with their migration; "See financials" toggle on the Members page.
+- Google sign-in with Socialite for existing, active users with a verified Google address (no sign-up through Google). Users who turned on 2FA still pass the 2FA challenge after Google. The button shows only when both Google keys are set. Email plus 2FA stays available.
+- Company isolation building block: `App\Models\CompanyScopedModel` (global scope by the current company, returns nothing when there is no current company, `company_id` always set from the current company on create and never changed on update) and `App\Support\CurrentCompany::run($company, fn)` for code with no signed-in user (queued jobs dispatched inside inherit it, through hidden context). Tested with two companies, including a queued job. Guards run on model events, so `company_id` must never be written with a query-builder `update()`. Every CRM model from milestone 1 on extends it.
+- Permissions `view all records`, `see financials`, `manage pipelines` with their migration (roles and permissions are synced from the enums by `App\Support\RolesAndPermissions::sync()`, which every permission migration calls); "Allow financials" toggle on the Members page for plain users. Promoting a user to admin drops their own financials grant, so a later demotion does not bring it back.
 - App shell: sidebar navigation for the CRM sections, empty placeholder pages.
-- activitylog configured (log name per model, causer = user, "API" or "system" when there is no user).
+- Moved to milestone 1: activitylog setup (log name per model, causer = user, "API" or "system" when there is no user), together with the first audited model.
 
 **Decide before starting:** none.
 
@@ -105,11 +106,12 @@ Inputs the spec implies but does not spell out, most likely to bite first. Each 
 **Deliverable:** all 11,937 people and 5,947 organizations from Pipedrive, with their labels, owners and custom fields, browsable in list views (search by name/email/phone, filter by label and owner, sort, choose columns, bulk change of label or owner) and on detail pages you can edit, each with a Changelog tab. A plain user sees only the records they own or follow; an admin sees all.
 
 **Work:**
+- activitylog setup for the audited models (moved from milestone 0).
 - Tables: `organizations`, `contacts`, `contact_emails`, `contact_phones`, `labels` + `labelables`, `followers`, `custom_field_definitions` (values in a `custom` json column on each record).
 - `visibleTo(User $user)` scope and policies for Organization and Contact (PER-2).
 - Organization list and detail page (CON-3): people count, open and closed deals count (zero until milestone 3), next activity date (empty until milestone 2).
 - Contact list and detail page (CON-1, CON-2, CON-4): multiple emails and phones with type and primary flag, marketing status, double opt-in, language, source.
-- Labels admin screen with name, colour and stable ID (CON-5).
+- Labels admin screen with name, colour and stable ID (CON-5); labels and custom field definitions belong to a company.
 - List view building block reused by every later list: server pagination, sort, column picker, filters, bulk actions (CON-8). Inline edit is limited to owner and labels in this milestone.
 - `pipedrive:import` command, first part: users (matched by email), labels, custom field definitions, organizations, persons.
 
@@ -134,7 +136,7 @@ Inputs the spec implies but does not spell out, most likely to bite first. Each 
 
 **Work:**
 - Tables: `pipelines`, `stages` (position, `rotten_after_days`, `auto_rule` json for milestone 4), `deals`, `deal_products` (DEA-1, DEA-2). Renewal parent/child via `parent_deal_id`.
-- Pipelines and stages admin screen (create, rename, reorder stages) behind `manage pipelines`.
+- Pipelines and stages admin screen (create, rename, reorder stages) behind `manage pipelines`. Pipelines belong to a company; a new company starts with the default Sales and Renewals pipelines and their stages.
 - Kanban per pipeline with Flux kanban (DEA-3); list view of deals using the milestone 1 building block.
 - Actions `MoveDealToStage`, `ChangeDealValue`, `MarkDealWon`, `MarkDealLost`, each writing a system activity with user, "API" or "system" (DEA-4, DEA-5).
 - Deal page with tabs for notes, email (filled in milestone 6), files, documents (DEA-6).
@@ -151,8 +153,9 @@ Inputs the spec implies but does not spell out, most likely to bite first. Each 
 **Work:**
 - Daily scheduled command `renewals:advance` using each stage's `auto_rule` (REN-1, REN-3, REN-4, REN-6). Idempotent; never moves a deal backwards past a manual move. Customer Notification has no automatic rule into it: only a user moves a deal there (REN-2).
 - `RolloverRenewal` action triggered by moving to Renewed (REN-5): same contact, organization, products and value; new expiry = old expiry + duration.
-- `POST /api/v1/leads` with Sanctum token and `Idempotency-Key` header (LEA-1, LEA-2, INT-1): contact upsert by email or phone, labels, source (Meta, LinkedIn, Google, website), form name. Documented by Scramble.
-- Google Chat webhook notification on every new lead (LEA-3), queued.
+- The daily job processes each company separately, inside that company's scope.
+- `POST /api/v1/leads` with Sanctum token and `Idempotency-Key` header (LEA-1, LEA-2, INT-1): the lead lands in the token owner's company; contact upsert by email or phone within that company, labels, source (Meta, LinkedIn, Google, website), form name. Documented by Scramble.
+- Google Chat webhook notification on every new lead (LEA-3), queued; the webhook URL is a setting on the Company settings page.
 - Failed renewal job alerts the admins (NFR jobs).
 
 **Decide before starting:** thresholds for 5 Days to Expire and Last Call; whether Customer Notification can be skipped; Make long term.
@@ -162,9 +165,9 @@ Inputs the spec implies but does not spell out, most likely to bite first. Each 
 **Deliverable:** one search box (also the Cmd+K palette) finding contacts, organizations, deals and emails; saved filters, personal or shared, starting with "Rotten deals" and "Renewals not renewed or expired"; a duplicates screen that proposes matches by email, phone and similar name and merges two records keeping all deals, activities and emails; import of an Apollo CSV or XLSX with column mapping, label assignment and skip/update/create for duplicates; export of any list with the chosen columns.
 
 **Work:**
-- Scout database engine on Contact, Organization, Deal (EmailMessage added in milestone 6), filtered through the visibility scope (SRC-1).
+- Scout database engine on Contact, Organization, Deal (EmailMessage added in milestone 6), filtered by company and through the visibility scope (SRC-1).
 - `saved_filters` table and filter builder on the list building block (SRC-2).
-- `MergeRecords` action and duplicates screen (CON-7).
+- `MergeRecords` action and duplicates screen (CON-7); only records of the same company can be merged.
 - `AnonymiseContact` action for GDPR requests (NFR GDPR): clears personal fields, emails and phones, keeps deals and amounts, logs who did it.
 - Import wizard (IMP-1) and export (IMP-2, respecting PER-3). Needs a spreadsheet package; proposal: spatie/simple-excel (approval needed).
 

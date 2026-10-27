@@ -2,6 +2,7 @@
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
+use App\Enums\UserPermission;
 use App\Enums\UserRole;
 use App\Models\Invitation;
 use App\Models\User;
@@ -72,7 +73,8 @@ new #[Title('Members')] class extends Component {
     }
 
     /**
-     * Toggle a member between admin and user.
+     * Toggle a member between admin and user. A user's own financials grant is dropped on the way to admin
+     * (the role covers it), so a later demotion starts without it.
      */
     public function toggleRole(int $userId): void
     {
@@ -80,7 +82,28 @@ new #[Title('Members')] class extends Component {
 
         abort_if($member->isAdmin() && ! config('app.simple_users_enabled'), 403);
 
-        $member->syncRoles($member->isAdmin() ? UserRole::User : UserRole::Admin);
+        if ($member->isAdmin()) {
+            $member->syncRoles(UserRole::User);
+
+            return;
+        }
+
+        $member->syncRoles(UserRole::Admin);
+        $member->revokePermissionTo(UserPermission::SeeFinancials);
+    }
+
+    /**
+     * Allow or hide amounts for a user. Admins always see them through their role.
+     */
+    public function toggleFinancials(int $userId): void
+    {
+        $member = $this->otherMember($userId);
+
+        abort_if($member->isAdmin(), 403);
+
+        $member->hasDirectPermission(UserPermission::SeeFinancials)
+            ? $member->revokePermissionTo(UserPermission::SeeFinancials)
+            : $member->givePermissionTo(UserPermission::SeeFinancials);
     }
 
     /**
@@ -106,7 +129,7 @@ new #[Title('Members')] class extends Component {
     #[Computed]
     public function members(): Collection
     {
-        return AdminCompany::resolve()->users()->with('roles')->orderBy('name')->get();
+        return AdminCompany::resolve()->users()->with(['roles', 'permissions'])->orderBy('name')->get();
     }
 
     /**
@@ -163,6 +186,9 @@ new #[Title('Members')] class extends Component {
                             <flux:badge size="sm" :color="$member->isAdmin() ? 'indigo' : 'zinc'">
                                 {{ $member->isAdmin() ? __('Admin') : __('User') }}
                             </flux:badge>
+                            @if (! $member->isAdmin() && $member->hasDirectPermission(UserPermission::SeeFinancials))
+                                <flux:badge size="sm" color="amber">{{ __('Financials') }}</flux:badge>
+                            @endif
                         </flux:table.cell>
                         <flux:table.cell>
                             <flux:badge size="sm" :color="$member->isActive() ? 'green' : 'red'">
@@ -180,6 +206,12 @@ new #[Title('Members')] class extends Component {
                                                 {{ $member->isAdmin() ? __('Make user') : __('Make admin') }}
                                             </flux:menu.item>
                                         @endif
+
+                                        @unless ($member->isAdmin())
+                                            <flux:menu.item icon="banknotes" wire:click="toggleFinancials({{ $member->id }})">
+                                                {{ $member->hasDirectPermission(UserPermission::SeeFinancials) ? __('Hide financials') : __('Allow financials') }}
+                                            </flux:menu.item>
+                                        @endunless
 
                                         <flux:menu.item :icon="$member->isActive() ? 'no-symbol' : 'check-circle'" wire:click="toggleActive({{ $member->id }})">
                                             {{ $member->isActive() ? __('Deactivate') : __('Activate') }}

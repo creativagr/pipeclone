@@ -1,4 +1,4 @@
-# Servers Manager Project Guidelines
+# Pipeclone (internal CRM) Project Guidelines
 
 ## Core Principles
 
@@ -38,13 +38,14 @@ Then, have subagents try to fix the bug and prove it with a passing test.
 - **Commits** — write small, focused commits. Don't include planning notes (`tasks/` is gitignored).
 - **Migrations**: never run `migrate` / `migrate:fresh` against the main DB during testing. Tests migrate their in-memory database automatically.
 - **Translations** — wrap user-facing strings in `__()` even if there's no translation yet.
+- **Company isolation:** every CRM model extends `App\Models\CompanyScopedModel`, so its rows belong to one company and are invisible to other companies. Code with no signed-in user (commands, scheduled tasks, jobs) wraps its work in `App\Support\CurrentCompany::run($company, fn)`. Never write `company_id` in a query-builder `update()`.
 - **Skills** — Boost-managed `.claude/skills/` files describe Laravel ecosystem patterns; activate them when working in their domains.
 
 ## Static Analysis & Refactoring
 
-- **Larastan (PHPStan)** — run `vendor/bin/phpstan analyse` and clear violations before pushing. Config is `phpstan.neon`: level 7, scanning `app/`, `bootstrap/app.php`, `config/`, `database/`, `routes/`. Note what is NOT scanned: the Livewire SFC pages under `resources/views/pages`. A trait used only by those pages is reported as `trait.unused` on every run because PHPStan genuinely cannot see a usage — reach for a plain class (see `App\Support\LockTimeoutToast`) rather than baselining it. Fix the root cause, don't baseline or `ignoreErrors` it away. PHPStan truncates its output by default — add `-v` to see the full error list. Scope to what you touched with `vendor/bin/phpstan analyse app/Path` for a faster loop.
+- **Larastan (PHPStan)** — run `vendor/bin/phpstan analyse` and clear violations before pushing. Config is `phpstan.neon`: level 7, scanning `app/`, `bootstrap/app.php`, `config/`, `database/`, `routes/`. Note what is NOT scanned: the Livewire SFC pages under `resources/views/pages`. A trait used only by those pages is reported as `trait.unused` on every run because PHPStan genuinely cannot see a usage — reach for a plain class (see `App\Support\AdminCompany`) rather than baselining it. The same applies to any trait with no user yet; a base class (see `App\Models\CompanyScopedModel`) is not reported. Fix the root cause, don't baseline or `ignoreErrors` it away. PHPStan truncates its output by default — add `-v` to see the full error list. A full run needs `--memory-limit=1G`. Scope to what you touched with `vendor/bin/phpstan analyse app/Path` for a faster loop.
 - **Larastan + Eloquent `casts()`** — Larastan does NOT read `casts()`, so it types enum/date/array attributes as their raw DB column types and reports false positives. Annotate the model with `@property` (use `CarbonImmutable` for `datetime`/`date` casts, the backing enum for enum casts, `array` for `array`/`json` casts) so Larastan sees the real type.
-- **Rector** — `vendor/bin/rector --dry-run` previews automated refactors; `vendor/bin/rector` (alias `process`) applies them. Config is `rector.php`: `LaravelLevelSetList::UP_TO_LARAVEL_110` + `SetList::CODE_QUALITY`, PHP 8.4, scanning `app/`, `config/`, `database/`, `resources/`, `routes/`, `tests/` (cache in `storage/rector/`). `CompactToVariablesRector` and `SafeDeclareStrictTypesRector` are intentionally skipped — leave them skipped.
+- **Rector** — `vendor/bin/rector --dry-run` previews automated refactors; `vendor/bin/rector` (alias `process`) applies them. Config is `rector.php`: `LaravelLevelSetList::UP_TO_LARAVEL_130_WITHOUT_ATTRIBUTES` + `SetList::CODE_QUALITY`, PHP 8.4, scanning `app/`, `config/`, `database/`, `resources/`, `routes/`, `tests/` (cache in `storage/rector/cache/`: Rector deletes its cache directory when the config changes, so keep it below `storage/rector/`, whose `.gitignore` must survive). `CompactToVariablesRector` and `SafeDeclareStrictTypesRector` are intentionally skipped — leave them skipped.
 - Rector rewrites code, it does not format — always review the `--dry-run` diff first, then run `vendor/bin/pint --dirty --format agent` after applying. Scope with `vendor/bin/rector process app/Path --dry-run` to review only the files you changed.
 - Neither tool runs in CI (only Pint + Pest do); they are local quality gates. Run them on the code you touched, not the whole tree, before handing work over.
 

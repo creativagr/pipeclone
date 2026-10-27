@@ -2,6 +2,7 @@
 
 use App\Enums\UserPermission;
 use App\Enums\UserRole;
+use App\Support\RolesAndPermissions;
 use Illuminate\Database\Migrations\Migration;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -11,21 +12,10 @@ return new class extends Migration
 {
     /**
      * Create the roles and permissions, so every environment (tests included) has them without seeding.
-     * This runs once per database: a new UserPermission case needs its own migration to reach existing databases.
      */
     public function up(): void
     {
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
-
-        foreach (UserPermission::cases() as $permission) {
-            Permission::findOrCreate($permission->value, 'web');
-        }
-
-        foreach (UserRole::cases() as $role) {
-            Role::findOrCreate($role->value, 'web')->syncPermissions(
-                array_map(fn (UserPermission $permission): string => $permission->value, $role->permissions()),
-            );
-        }
+        RolesAndPermissions::sync();
     }
 
     /**

@@ -4,11 +4,11 @@ A starter kit for new Laravel 13 projects, built on Livewire 4, Flux Pro, Fortif
 
 ## Features
 
-- **Companies:** every user belongs to one company and is either an **admin** or a **user**. Signing up creates a new company with the user as its admin.
-- **Member management** (admins): create users, invite them by email, promote or demote, activate or deactivate, and remove them.
+- **Companies:** every user belongs to one company and is either an **admin** or a **user**. Signing up creates a new company with the user as its admin. CRM data is kept per company: nobody, admins included, sees another company's records.
+- **Member management** (admins): create users, invite them by email, promote or demote, activate or deactivate, remove them, and allow or hide financial amounts for plain users.
 - **Company settings** (admins): rename or delete the company with all its users.
 - **API tokens:** every user can create Sanctum tokens for the API.
-- **Authentication:** login, registration, email verification, password reset, two-factor authentication and passkeys (Fortify).
+- **Authentication:** login, registration, email verification, password reset, two-factor authentication and passkeys (Fortify), plus "Continue with Google" for existing users (two-factor authentication still applies).
 - **Feature flags:** turn public sign-up and simple users on or off with environment variables.
 - **Console commands:** create users and test the mail settings.
 - **Tooling:** Pest, Pint, Larastan, Rector and Laravel Boost.
@@ -69,6 +69,7 @@ Besides the standard Laravel settings (`APP_URL`, `DB_*`, `MAIL_*`), these varia
 | --- | --- | --- |
 | `REGISTRATION_ENABLED` | `true` | Allows public sign-up. Each sign-up creates a new company with the user as its admin. When `false`, the sign-up page and link are removed. |
 | `SIMPLE_USERS_ENABLED` | `true` | Allows admins to create, invite, or demote to simple (non-admin) users. When `false`, pending invitations can no longer be accepted. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | Google OAuth client for "Continue with Google". The button appears once both are set. Only existing, active users whose verified Google address matches their email can sign in this way; nobody is created. Users with two-factor authentication still get the two-factor challenge. Authorized redirect URI: `<APP_URL>/auth/google/callback`. |
 
 After changing `.env` on a server with cached config, run `php artisan config:clear` (or `config:cache` again).
 

@@ -51,6 +51,12 @@
             </div>
         </form>
 
+        @if (config('services.google.client_id') && config('services.google.client_secret'))
+            <flux:button :href="route('auth.google.redirect')" class="w-full" data-test="google-login-button">
+                {{ __('Continue with Google') }}
+            </flux:button>
+        @endif
+
         @if (Route::has('register'))
             <div class="space-x-1 text-sm text-center rtl:space-x-reverse text-zinc-600 dark:text-zinc-400">
                 <span>{{ __('Don\'t have an account?') }}</span>

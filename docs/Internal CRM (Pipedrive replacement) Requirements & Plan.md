@@ -12,7 +12,8 @@ Decisions taken in the meeting:
 - **Four core objects:** deals, contacts, organizations, activities. Plus a documents store (offers, invoices, any PDF) on S3 or Google Drive.
 - **Contacts stay generic.** Used only for customers today, but the model must not assume customer vs supplier.
 - **One deal entity, many pipelines.** Sales and Renewals are the same object with different stage sets; a deal sits in exactly one stage of one pipeline.
-- **Permissions kept simple:** users see records they own (or are added to), an admin sees everything, plus one extra permission to hide financial figures.
+- **Permissions kept simple:** users see records they own (or are added to), an admin sees everything in their own company, plus one extra permission to hide financial figures.
+- **Companies are isolated.** Each company (tenant) has its own users and CRM data; nobody, admins included, sees another company's data.
 - **Bulk email goes through a cheap external provider** (Resend, AWS SES or similar) via API. Subscribers and lists are managed inside our app, so we stop paying per contact.
 - **Not time-sensitive.** The team does not expect to switch this year; the target is 2027. Budget reference: about 1,000€ of work equals 8 months of the current subscription.
 - **Insights/reports were not discussed** and are out of the first scope.
@@ -126,10 +127,11 @@ The daily job replaces today's Make scenario; moving a card to Renewed spawns th
 
 ### Users and permissions
 
-1. **PER-1** Roles: Admin (sees and edits everything) and User.
-2. **PER-2** A User sees deals, contacts and organizations where they are owner or follower. Adding a follower gives that colleague access to the record.
+1. **PER-1** Roles: Admin (sees and edits everything in their own company) and User.
+2. **PER-2** Within their company, a User sees deals, contacts and organizations where they are owner or follower. Adding a follower gives that colleague access to the record.
 3. **PER-3** Permission "can see financials": without it, values, totals and amounts are hidden in boards, lists, exports and API responses.
 4. **PER-4** Unlimited users at no extra cost.
+5. **PER-5** Company isolation: every user belongs to one company, and all CRM data (contacts, organizations, deals, pipelines, labels, activities, documents, emails, saved filters, settings) belongs to one company. No screen, search, export, API call, job or notification ever shows one company's data to another company's users.
 
 ### Search, filters, import and export
 
@@ -168,7 +170,7 @@ The app is internal, for a handful of users, so the bar is reliability and simpl
 | Performance | Kanban and list pages under 1 s for current data |
 | UX | Close to HubSpot/Pipedrive patterns; dark mode; Greek and English data, UI in English |
 | Audit | Every change to deals, contacts and orgs logged (who, when, old and new value) |
-| Security | Login with Google Workspace SSO or email + 2FA; policies enforce PER-1 to PER-3 on web, API and exports |
+| Security | Login with Google Workspace SSO (existing users only; 2FA still applies when enabled) or email + 2FA; policies enforce PER-1 to PER-3 and PER-5 on web, API and exports |
 | GDPR | Marketing status and consent stored per contact; unsubscribe honoured everywhere; delete/anonymise a contact on request |
 | Backups | Daily DB backup off-site, documents bucket versioned |
 | Jobs | Scheduler and queues monitored; failed renewal or sync jobs alert the admin |
@@ -176,11 +178,12 @@ The app is internal, for a handful of users, so the bar is reliability and simpl
 
 ## Data model
 
-About fifteen tables cover the MVP; polymorphic relations let notes, activities, documents, labels and followers attach to any record, as in Pipedrive.
+About fifteen tables cover the MVP; polymorphic relations let notes, activities, documents, labels and followers attach to any record, as in Pipedrive. Every CRM table also has a `company_id` (PER-5), and unique indexes include it (an email is unique per company).
 
 | Table | Key columns | Relations |
 | --- | --- | --- |
-| users | name, email, role (admin, user), can\_see\_financials | owns contacts, orgs, deals |
+| companies | name, settings (Google Chat webhook) | has many users and all CRM records |
+| users | company\_id, name, email; roles and permissions (admin, user, see financials) via spatie/laravel-permission | owns contacts, orgs, deals |
 | organizations | name, vat, domain, address, owner\_id, custom (json) | has many contacts, deals |
 | contacts | first\_name, last\_name, organization\_id, owner\_id, language, marketing\_status, double\_opt\_in, source, custom (json) | has many contact\_emails, contact\_phones, deals |
 | contact\_emails / contact\_phones | value, type, is\_primary | belong to contact; unique index on email |
@@ -213,13 +216,15 @@ A single Laravel monolith with Livewire for the UI, MySQL, Redis queues and the 
 | Mail sync | Gmail API (Google Workspace) via OAuth; IMAP fallback | Matches Sales Inbox behaviour |
 | Bulk email | Resend or AWS SES driver behind one interface | Swap provider without code changes |
 | Audit | spatie/laravel-activitylog | Feeds timeline and changelog |
-| Permissions | Laravel policies + global scopes for owner/follower visibility; spatie/laravel-permission for roles (admin, user) and permissions | PER-1 to PER-3 |
+| Permissions | Global scope per company; Laravel policies + scopes for owner/follower visibility; spatie/laravel-permission for roles (admin, user) and permissions | PER-1 to PER-3, PER-5 |
 | API | REST under /api/v1 with Sanctum tokens; OpenAPI spec | Make, website forms, future MCP |
 | Hosting | One VPS (Forge or Ploi) or the company's existing server | Low fixed cost |
 
 Domain code lives in small action classes (MoveDealToStage, RolloverRenewal, UpsertContactFromLead) so the same logic serves the UI, the API, the scheduler and, later, automations.
 
 ## Build plan
+
+> Superseded by the implementation plan in `docs/superpowers/plans/2026-10-24-crm-implementation-plan.md` (Pipedrive import moved to the first milestones, company isolation added, about 42 days). The table below is the first estimate, kept for reference.
 
 The MVP is about 40 developer-days (8 to 9 weeks for one developer working with Claude Code), followed by a 2-week parallel run before Pipedrive is switched off. Estimates are first-pass and assume Flux Pro for all screens, admin included.
 

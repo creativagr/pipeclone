@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\UserPermission;
 use App\Enums\UserRole;
 use App\Models\Invitation;
 use App\Models\User;
@@ -151,6 +152,44 @@ test('admins can promote a user and demote an admin', function () {
     expect($member->fresh()->getRoleNames()->all())->toBe([UserRole::User->value]);
 });
 
+test('admins can allow and hide financials for a user', function () {
+    $admin = User::factory()->admin()->create();
+    $member = User::factory()->for($admin->company)->create();
+
+    $component = Livewire::actingAs($admin)->test('pages::settings.members');
+
+    $component->call('toggleFinancials', $member->id);
+    expect($member->fresh()->can(UserPermission::SeeFinancials->value))->toBeTrue();
+
+    $component->call('toggleFinancials', $member->id);
+    expect($member->fresh()->can(UserPermission::SeeFinancials->value))->toBeFalse();
+});
+
+test('a financials grant does not come back after promoting and demoting a user', function () {
+    $admin = User::factory()->admin()->create();
+    $member = User::factory()->for($admin->company)->create();
+    $member->givePermissionTo(UserPermission::SeeFinancials);
+
+    Livewire::actingAs($admin)
+        ->test('pages::settings.members')
+        ->call('toggleRole', $member->id)
+        ->call('toggleRole', $member->id);
+
+    expect($member->fresh()->can(UserPermission::SeeFinancials->value))->toBeFalse();
+});
+
+test('financials cannot be toggled for an admin', function () {
+    $admin = User::factory()->admin()->create();
+    $otherAdmin = User::factory()->for($admin->company)->admin()->create();
+
+    Livewire::actingAs($admin)
+        ->test('pages::settings.members')
+        ->call('toggleFinancials', $otherAdmin->id)
+        ->assertForbidden();
+
+    expect($otherAdmin->fresh()->getDirectPermissions())->toBeEmpty();
+});
+
 test('admins can deactivate and reactivate a member', function () {
     $admin = User::factory()->admin()->create();
     $member = User::factory()->for($admin->company)->create();
@@ -194,9 +233,11 @@ test('admins cannot change or remove themselves or users of other companies', fu
     'toggle role of self' => ['toggleRole', fn (User $admin): User => $admin],
     'deactivate self' => ['toggleActive', fn (User $admin): User => $admin],
     'remove self' => ['removeMember', fn (User $admin): User => $admin],
+    'toggle financials of self' => ['toggleFinancials', fn (User $admin): User => $admin],
     'toggle role of outsider' => ['toggleRole', fn (): User => User::factory()->create()],
     'deactivate outsider' => ['toggleActive', fn (): User => User::factory()->create()],
     'remove outsider' => ['removeMember', fn (): User => User::factory()->create()],
+    'toggle financials of outsider' => ['toggleFinancials', fn (): User => User::factory()->create()],
 ]);
 
 test('admins cannot create or invite users when simple users are disabled', function () {
